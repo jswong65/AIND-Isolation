@@ -13,6 +13,41 @@ class Timeout(Exception):
     """Subclass base exception for code clarity."""
     pass
 
+def num_moves(game, player):
+    # calculate number of legal moves
+    if game.is_loser(player):
+       return float("-inf")
+
+    if game.is_winner(player):
+       return float("inf")
+
+    return float(len(game.get_legal_moves()))
+
+def moves_diff2(game, player):
+    #calculate #moves of player - 2*#moves of opponent. 
+    if game.is_loser(player):
+        return float("-inf")
+
+    if game.is_winner(player):
+        return float("inf")
+
+    own_moves = len(game.get_legal_moves(player))
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+
+    return float(own_moves - 2*opp_moves)
+
+def moves_diff3(game, player):
+    #calculate #moves of player - 2*#moves of opponent. 
+    if game.is_loser(player):
+        return float("-inf")
+
+    if game.is_winner(player):
+        return float("inf")
+
+    own_moves = len(game.get_legal_moves(player))
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+
+    return float(own_moves - 2*opp_moves)
 
 def custom_score(game, player):
     """Calculate the heuristic value of a game state from the point of view
@@ -38,6 +73,8 @@ def custom_score(game, player):
     """
 
     # TODO: finish this function!
+    return moves_diff2(game, player)
+
     raise NotImplementedError
 
 
@@ -118,24 +155,45 @@ class CustomPlayer:
 
         self.time_left = time_left
 
+        def move_function(method, depth):
+            if self.method == 'alphabeta':
+                return self.alphabeta(game,depth)[1]
+            else:
+                return self.minimax(game,depth)[1]
+
         # TODO: finish this function!
 
         # Perform any required initializations, including selecting an initial
         # move from the game board (i.e., an opening book), or returning
         # immediately if there are no legal moves
+        
 
         try:
             # The search method call (alpha beta or minimax) should happen in
             # here in order to avoid timeout. The try/except block will
             # automatically catch the exception raised by the search method
             # when the timer gets close to expiring
-            pass
+            
+            if (game.width/2, game.height/2) in game.get_blank_spaces():
+                return (game.width/2, game.height/2)
+
+            if self.iterative:
+                # perform iterative deepening
+                size = game.width*game.height
+                move = (-1,-1)
+                for i in range(1, size): 
+                    move = move_function(self.method, i)                      
+            else:
+                # perform depth-limited search
+                move = move_function(self.method, self.search_depth)
 
         except Timeout:
             # Handle any actions required at timeout, if necessary
             pass
 
         # Return the best move from the last completed search iteration
+        return move
+
         raise NotImplementedError
 
     def minimax(self, game, depth, maximizing_player=True):
@@ -171,9 +229,58 @@ class CustomPlayer:
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
-
+        
         # TODO: finish this function!
+        
+        # get current active player.
+        player = game.active_player
+
+        # Return Utility if current state is terminal state or max_depth
+        def max_value(game, depth):
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+            # Implement min-value search
+            # get legal moves and inititate the maximum value, position tuptle
+            moves, val = game.get_legal_moves(), (float("-inf"),(-1,-1))
+            # terminate state or current depth is greater than or equal to search_depth
+            if not moves or depth <= 0:  return (self.score(game,player), (-1,-1))       
+            # in the legal moves, find the maximum value
+            for m in moves:
+                next_state = game.forecast_move(m)
+                # For minimax function            
+                val = max(val, (min_value(next_state, depth-1)[0],m))
+
+            return val
+
+        def min_value(game, depth):
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+            # Implement min-value search   
+            # get legal moves and inititate the minimum value, position tuptle
+            moves, val = game.get_legal_moves(), (float("inf"),(-1,-1))
+            # terminate state or current depth is greater than or equal to search_depth
+            if not moves or depth <= 0:  return (self.score(game,player), (-1,-1))
+            # in the legal moves, find the minimum value
+            for m in moves: 
+                # For minimax function
+                next_state = game.forecast_move(m)
+                val = min(val, (max_value(next_state, depth-1)[0],m))
+
+            return val
+      
+        # for searching max value
+        if maximizing_player:
+            # return the move that maximize the min_val
+            return max_value(game, depth)
+        # for searching min value
+        else:
+            # return the move that minimize the max_val
+            return min_value(game, depth)
+            
+        
+        
         raise NotImplementedError
+
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf"), maximizing_player=True):
         """Implement minimax search with alpha-beta pruning as described in the
@@ -216,5 +323,51 @@ class CustomPlayer:
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
-        # TODO: finish this function!
+        # get current active player.
+        player = game.active_player
+
+        def ab_max_value(game, depth, alpha, beta):
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+            
+            # get legal moves and inititate the maximum value, position tuptle
+            moves, val = game.get_legal_moves(), (float("-inf"),(-1,-1))  
+            # terminate state or current depth is greater than or equal to search_depth
+            if not moves or depth <= 0:  return (self.score(game,player),(-1,-1))
+            # in the legal moves, find the maximum value
+            for m in moves:
+                next_state = game.forecast_move(m)    
+                val = max(val, (ab_min_value(next_state, depth-1, alpha, beta)[0], m))
+                if val[0] >= beta: return val
+                alpha = max(alpha, val[0])
+            return val
+
+        def ab_min_value(game, depth, alpha, beta):
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+
+            # get legal moves and inititate the minimum value, position tuptle
+            moves, val = game.get_legal_moves(), (float("inf"),(-1,-1))      
+            # terminate state or current depth is greater than or equal to search_depth
+            if not moves or depth <= 0:  return (self.score(game,player),(-1,-1))
+            # in the legal moves, find the minimum value
+            for m in moves: 
+                # For minimax function
+                next_state = game.forecast_move(m)
+                val = min(val, (ab_max_value(next_state, depth-1, alpha, beta)[0],m))
+                if val[0] <= alpha: return val
+                beta = min(beta, val[0])
+            return val
+
+        
+       
+        return ab_max_value(game, depth, alpha, beta)
+        
+
+              
         raise NotImplementedError
+
+
+    
+
+    
